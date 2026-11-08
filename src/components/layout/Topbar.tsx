@@ -44,11 +44,11 @@ export function Topbar({ onOpenMenu, showMenuButton }: { onOpenMenu: () => void;
 
   const notifications = useMemo(() => {
     const items: Array<{ id: string; text: string; to: string }> = []
-    if (counts.pendingApprovals)
+    if (counts.papersDue)
       items.push({
-        id: 'keys',
-        text: `${counts.pendingApprovals} key correction request${counts.pendingApprovals > 1 ? 's' : ''} awaiting your decision`,
-        to: '/key-approvals',
+        id: 'papers',
+        text: `${counts.papersDue} question paper${counts.papersDue > 1 ? 's are' : ' is'} ready to publish to the HOD (exam started)`,
+        to: '/schedule-exam#paper-release',
       })
     if (counts.awaitingPublication)
       items.push({

@@ -2,7 +2,6 @@ import {
   CalendarPlus,
   ClipboardCheck,
   History,
-  KeyRound,
   LayoutDashboard,
   Usb,
   type LucideIcon,
@@ -13,14 +12,13 @@ export interface NavItem {
   label: string
   title: string
   icon: LucideIcon
-  badgeKey?: 'pendingApprovals' | 'awaitingPublication'
+  badgeKey?: 'papersDue' | 'awaitingPublication'
 }
 
 export const NAV_ITEMS: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', title: 'Dashboard', icon: LayoutDashboard },
-  { path: '/schedule-exam', label: 'Schedule Exam', title: 'Schedule Exam', icon: CalendarPlus },
+  { path: '/schedule-exam', label: 'Schedule Exam', title: 'Schedule Exam', icon: CalendarPlus, badgeKey: 'papersDue' },
   { path: '/file-transfer', label: 'File Transfer', title: 'File Transfer', icon: Usb },
-  { path: '/key-approvals', label: 'Key Approvals', title: 'Key Approvals', icon: KeyRound, badgeKey: 'pendingApprovals' },
   {
     path: '/results',
     label: 'Results & Publishing',

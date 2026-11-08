@@ -4,7 +4,7 @@ import {
   CalendarCheck,
   CalendarPlus,
   ClipboardCheck,
-  KeyRound,
+  FileText,
   Package,
   PackageCheck,
   Send,
@@ -15,7 +15,7 @@ import { LinkButton } from '../../components/ui/Button'
 import { Card, CardBody, CardHeader } from '../../components/ui/Card'
 import { EmptyState, TableWrap, Td, Th } from '../../components/ui/Misc'
 import { Pill, StatusBadge } from '../../components/ui/StatusBadge'
-import { examStart, formatDate, formatTime, relativeTime } from '../../lib/utils'
+import { examStart, formatDate, formatDateTime, formatTime, paperState, relativeTime, timeUntil } from '../../lib/utils'
 import { useApp } from '../../store/AppStore'
 import { CategoryIcon } from '../activity/CategoryIcon'
 
@@ -54,7 +54,7 @@ function SummaryCard({
 }
 
 export function DashboardPage() {
-  const { counts, exams, keyRequests, activity } = useApp()
+  const { counts, exams, activity, now } = useApp()
 
   const upcoming = useMemo(
     () =>
@@ -65,21 +65,26 @@ export function DashboardPage() {
     [exams],
   )
 
-  const pending = keyRequests.filter((k) => k.status === 'Pending')
-  const examById = (id: string) => exams.find((e) => e.id === id)
+  const paperQueue = useMemo(
+    () =>
+      exams
+        .filter((e) => paperState(e, now) === 'Ready to publish' || paperState(e, now) === 'Not started')
+        .sort((a, b) => examStart(a).getTime() - examStart(b).getTime())
+        .slice(0, 5),
+    [exams, now],
+  )
 
   return (
     <div className="space-y-6">
       <p className="max-w-3xl text-sm text-muted">
-        Overview of the exam administration workflow: schedule → export package → import verified results → review key
-        corrections → publish. All figures are calculated from the demo records stored in this browser.
+        Overview of the exam administration workflow: schedule → release question paper to the HOD at exam start → export package → import verified results → publish by year, department and section. All figures are calculated from the demo records stored in this browser.
       </p>
 
       <section aria-label="Summary" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryCard label="Scheduled Exams" value={counts.scheduled} hint="Ready for package export" icon={CalendarCheck} to="/schedule-exam" />
         <SummaryCard label="Exam Packages Ready" value={counts.packagesReady} hint="Exported, awaiting results" icon={PackageCheck} to="/file-transfer" />
-        <SummaryCard label="Pending Key Approvals" value={counts.pendingApprovals} hint="HOD requests to decide" icon={KeyRound} to="/key-approvals" />
-        <SummaryCard label="Results Awaiting Publication" value={counts.awaitingPublication} hint="Includes re-publish after correction" icon={ClipboardCheck} to="/results" />
+        <SummaryCard label="Question Papers to Release" value={counts.papersPending} hint={`${counts.papersDue} ready to publish to HOD now`} icon={FileText} to="/schedule-exam#paper-release" />
+        <SummaryCard label="Results Awaiting Publication" value={counts.awaitingPublication} hint="To HOD and Principal" icon={ClipboardCheck} to="/results" />
       </section>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
@@ -145,38 +150,40 @@ export function DashboardPage() {
 
           <Card>
             <CardHeader
-              title="Pending correction requests"
-              description="Answer-key changes requested by HODs."
+              title="Question paper release to HOD"
+              description="Each paper is published to the HOD just after its exam starts (simulated)."
               actions={
-                <LinkButton to="/key-approvals" size="sm" variant="secondary">
-                  Review all
+                <LinkButton to="/schedule-exam#paper-release" size="sm" variant="secondary">
+                  Manage releases
                 </LinkButton>
               }
             />
-            {pending.length === 0 ? (
-              <EmptyState icon={KeyRound} title="No pending requests">
-                New HOD correction requests will appear here.
+            {paperQueue.length === 0 ? (
+              <EmptyState icon={FileText} title="Nothing waiting for release">
+                Scheduled exams whose paper has not been released yet will appear here.
               </EmptyState>
             ) : (
               <ul className="divide-y divide-line">
-                {pending.map((k) => {
-                  const e = examById(k.examId)
+                {paperQueue.map((e) => {
+                  const st = paperState(e, now)
                   return (
-                    <li key={k.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
+                    <li key={e.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-4">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-ink">
-                          {e ? `${e.subject} (${e.classSection}, ${e.examType})` : k.examId}
+                          {e.subject} ({e.classSection}, {e.examType})
                         </p>
                         <p className="mt-0.5 text-[13px] text-muted">
-                          <span className="font-semibold text-ink">{k.questionId}</span> · key {k.oldKey} → {k.newKey} ·{' '}
-                          {k.requestedBy} · {relativeTime(k.requestedAt)}
+                          Starts {formatDateTime(examStart(e).toISOString())} · {timeUntil(examStart(e), now)} ·{' '}
+                          {e.autoReleasePaper ? 'auto-release on' : 'manual release'}
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <StatusBadge status="Pending" />
-                        <LinkButton to="/key-approvals" size="sm">
-                          Review
-                        </LinkButton>
+                        <StatusBadge status={st} />
+                        {st === 'Ready to publish' && (
+                          <LinkButton to="/schedule-exam#paper-release" size="sm">
+                            Publish
+                          </LinkButton>
+                        )}
                       </div>
                     </li>
                   )
@@ -192,7 +199,7 @@ export function DashboardPage() {
             <CardBody className="grid grid-cols-1 gap-2.5">
               <QuickAction to="/schedule-exam" icon={CalendarPlus} label="Schedule an exam" primary />
               <QuickAction to="/file-transfer" icon={Package} label="Export a package" />
-              <QuickAction to="/key-approvals" icon={KeyRound} label="Review approvals" />
+              <QuickAction to="/schedule-exam#paper-release" icon={FileText} label="Release question papers" />
               <QuickAction to="/results" icon={Send} label="Publish results" />
             </CardBody>
           </Card>

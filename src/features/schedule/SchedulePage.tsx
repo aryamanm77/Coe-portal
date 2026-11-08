@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import {
   AlertTriangle,
   CalendarClock,
@@ -18,7 +19,8 @@ import { ConfirmModal, Modal } from '../../components/ui/Modal'
 import { DefList, EmptyState, SimNotice, TableWrap, Td, Th } from '../../components/ui/Misc'
 import { Pill, StatusBadge } from '../../components/ui/StatusBadge'
 import { useToast } from '../../components/ui/Toast'
-import { CLASS_SECTIONS, DEPARTMENT_SHORT, DEPARTMENTS, SEMESTERS, SUBJECTS } from '../../data/catalog'
+import { CLASS_SECTIONS, DEPARTMENT_SHORT, DEPARTMENTS, HOD_NAMES, SEMESTERS, SUBJECTS } from '../../data/catalog'
+import { PaperReleaseSection } from './PaperReleaseSection'
 import {
   cx,
   DEFAULT_QUESTIONS_PER_MODULE,
@@ -28,6 +30,7 @@ import {
   formatDateTime,
   formatDuration,
   formatTime,
+  paperState,
   toDateInput,
   totalQuestions,
 } from '../../lib/utils'
@@ -46,6 +49,7 @@ interface FormState {
   date: string
   startTime: string
   duration: string
+  autoRelease: boolean
 }
 
 type Errors = Record<string, string>
@@ -60,6 +64,7 @@ const emptyForm = (): FormState => ({
   date: '',
   startTime: '',
   duration: '',
+  autoRelease: true,
 })
 
 const fromExam = (e: Exam): FormState => ({
@@ -72,6 +77,7 @@ const fromExam = (e: Exam): FormState => ({
   date: e.date,
   startTime: e.startTime,
   duration: e.durationMinutes ? String(e.durationMinutes) : '',
+  autoRelease: e.autoReleasePaper,
 })
 
 const STEPS = [
@@ -133,6 +139,7 @@ function toInput(f: FormState): ExamDraftInput {
     date: f.date,
     startTime: f.startTime,
     durationMinutes: isPositiveInt(f.duration) ? Number(f.duration) : null,
+    autoReleasePaper: f.autoRelease,
   }
 }
 
@@ -150,6 +157,10 @@ export function SchedulePage() {
   const { exams, saveExam } = useApp()
   const toast = useToast()
   const formTop = useRef<HTMLDivElement>(null)
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' })
+  }, [hash])
 
   const [form, setForm] = useState<FormState>(emptyForm)
   const [errors, setErrors] = useState<Errors>({})
@@ -517,6 +528,26 @@ export function SchedulePage() {
                   <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   The exam must start in the future (checked against this device's clock).
                 </p>
+
+                <fieldset className="rounded-ctl border border-line bg-slate-50 p-4 sm:col-span-3">
+                  <legend className="px-1 text-[13px] font-semibold text-navy">Question paper release to HOD</legend>
+                  <label className="flex cursor-pointer items-start gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 h-4 w-4 accent-[#102A43]"
+                      checked={form.autoRelease}
+                      onChange={(e) => set('autoRelease', e.target.checked)}
+                    />
+                    <span>
+                      <span className="block font-medium text-ink">Publish the question paper to the HOD automatically when the exam starts</span>
+                      <span className="mt-0.5 block text-xs text-muted">
+                        {form.department ? `Recipient: ${HOD_NAMES[form.department] ?? form.department}. ` : ''}
+                        The paper is never released before the start time. If you turn this off, publish it manually from
+                        the release section below once the exam has started. Simulation only — nothing is actually sent.
+                      </span>
+                    </span>
+                  </label>
+                </fieldset>
               </div>
             )}
           </CardBody>
@@ -582,6 +613,12 @@ export function SchedulePage() {
                 />
               </div>
               <SummaryRow label="Duration" value={summary.durationMinutes ? formatDuration(summary.durationMinutes) : ''} />
+              <SummaryRow
+                label="Question paper to HOD"
+                value={`${form.autoRelease ? 'Automatically at exam start' : 'Manually after exam start'}${
+                  form.department ? ` → ${HOD_NAMES[form.department] ?? ''}` : ''
+                }`}
+              />
 
               <div>
                 <p className="text-xs font-medium uppercase tracking-wide text-muted">Questions per module</p>
@@ -601,6 +638,8 @@ export function SchedulePage() {
         </aside>
       </div>
 
+      <PaperReleaseSection />
+
       <ScheduledTable onView={setViewing} onEdit={startEdit} />
 
       {/* confirm */}
@@ -619,6 +658,7 @@ export function SchedulePage() {
             ['Exam type', form.examType],
             ['Date & time', `${formatDate(form.date)}, ${formatTime(form.startTime)}`],
             ['Duration', summary.durationMinutes ? formatDuration(summary.durationMinutes) : '—'],
+            ['Question paper', `${form.autoRelease ? 'Auto-published' : 'Published manually'} to ${HOD_NAMES[form.department] ?? 'the HOD'} after the exam starts`],
             ['Questions', `${total} total (${summary.moduleQuestions.join(' / ')})`],
           ]}
         />
@@ -666,6 +706,23 @@ function SummaryRow({ label, value }: { label: string; value: string }) {
   )
 }
 
+function PaperInfo({ exam }: { exam: Exam }) {
+  const { now } = useApp()
+  const st = paperState(exam, now)
+  return (
+    <div className="rounded-ctl border border-line p-3 text-sm">
+      <p className="flex flex-wrap items-center gap-2 font-medium text-navy">
+        Question paper to HOD <StatusBadge status={st} />
+      </p>
+      <p className="mt-1 text-muted">
+        {exam.paperRelease
+          ? `${exam.paperRelease.paperId} released ${formatDateTime(exam.paperRelease.releasedAt)} to ${exam.paperRelease.recipient} (${exam.paperRelease.mode.toLowerCase()}, simulated).`
+          : `${exam.autoReleasePaper ? 'Will be published automatically' : 'Must be published manually'} to ${HOD_NAMES[exam.department] ?? 'the HOD'} after the exam starts.`}
+      </p>
+    </div>
+  )
+}
+
 function ExamDetails({ exam }: { exam: Exam }) {
   return (
     <div className="space-y-5">
@@ -700,6 +757,7 @@ function ExamDetails({ exam }: { exam: Exam }) {
           Total <span className="font-semibold">{totalQuestions(exam)}</span> questions
         </p>
       </div>
+      <PaperInfo exam={exam} />
       {exam.packageId && (
         <div className="rounded-ctl border border-line p-3 text-sm">
           <p className="font-medium text-navy">Demo package</p>
@@ -716,7 +774,7 @@ function ExamDetails({ exam }: { exam: Exam }) {
 /* ---------------- scheduled exams table ---------------- */
 
 function ScheduledTable({ onView, onEdit }: { onView: (e: Exam) => void; onEdit: (e: Exam) => void }) {
-  const { exams } = useApp()
+  const { exams, now } = useApp()
   const [q, setQ] = useState('')
   const [subject, setSubject] = useState('')
   const [cls, setCls] = useState('')
@@ -806,6 +864,7 @@ function ScheduledTable({ onView, onEdit }: { onView: (e: Exam) => void; onEdit:
               <Th>Duration</Th>
               <Th>Questions</Th>
               <Th>Status</Th>
+              <Th>Paper to HOD</Th>
               <Th className="text-right">Actions</Th>
             </tr>
           </thead>
@@ -829,6 +888,9 @@ function ScheduledTable({ onView, onEdit }: { onView: (e: Exam) => void; onEdit:
                 <Td>{totalQuestions(e)}</Td>
                 <Td>
                   <StatusBadge status={e.status} />
+                </Td>
+                <Td>
+                  <StatusBadge status={paperState(e, now)} />
                 </Td>
                 <Td>
                   <div className="flex justify-end gap-1.5">

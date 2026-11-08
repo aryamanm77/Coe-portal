@@ -20,6 +20,8 @@ export const DEPARTMENT_SHORT: Record<string, string> = {
 }
 
 export const SUBJECTS: CatalogSubject[] = [
+  { code: '21MA11', name: 'Calculus and Differential Equations', department: DEPARTMENTS[0], semester: 1 },
+  { code: '21PH22', name: 'Engineering Physics', department: DEPARTMENTS[1], semester: 2 },
   { code: '21CS32', name: 'Data Structures and Algorithms', department: DEPARTMENTS[0], semester: 3 },
   { code: '21CS43', name: 'Design and Analysis of Algorithms', department: DEPARTMENTS[0], semester: 4 },
   { code: '21CS52', name: 'Operating Systems', department: DEPARTMENTS[0], semester: 5 },
@@ -32,6 +34,8 @@ export const SUBJECTS: CatalogSubject[] = [
   { code: '21EC62', name: 'Microwave Engineering', department: DEPARTMENTS[2], semester: 6 },
   { code: '21ME33', name: 'Basic Thermodynamics', department: DEPARTMENTS[3], semester: 3 },
   { code: '21ME45', name: 'Fluid Mechanics', department: DEPARTMENTS[3], semester: 4 },
+  { code: '21IS71', name: 'Big Data Analytics', department: DEPARTMENTS[1], semester: 7 },
+  { code: '21EC81', name: 'Wireless Communication', department: DEPARTMENTS[2], semester: 8 },
 ]
 
 export const SEMESTERS = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -45,10 +49,14 @@ export const HOD_NAMES: Record<string, string> = {
   'Mechanical Engineering': 'Dr. V. Sundaram (HOD, ME)',
 }
 
-export const STUDENT_NAMES = [
-  'Aarav Nair', 'Diya Menon', 'Rohan Iyer', 'Ananya Reddy', 'Karthik Subramanian', 'Meera Pillai',
-  'Vihaan Shetty', 'Isha Kulkarni', 'Arjun Bhat', 'Sneha Hegde', 'Rahul Gowda', 'Priya Naik',
-  'Aditya Rao', 'Kavya Shenoy', 'Nikhil Joshi', 'Pooja Desai', 'Siddharth Kamath', 'Tanvi Prabhu',
-  'Harsh Patil', 'Ritika Das', 'Manoj Kumar', 'Lakshmi Narayan', 'Varun Acharya', 'Shreya Bhandary',
-  'Deepak Murthy', 'Nandini Rao',
+/** Demo roster names — combined deterministically so large sections get varied, realistic names. */
+export const FIRST_NAMES = [
+  'Aarav', 'Diya', 'Rohan', 'Ananya', 'Karthik', 'Meera', 'Vihaan', 'Isha', 'Arjun', 'Sneha',
+  'Rahul', 'Priya', 'Aditya', 'Kavya', 'Nikhil', 'Pooja', 'Siddharth', 'Tanvi', 'Harsh', 'Ritika',
+  'Manoj', 'Lakshmi', 'Varun', 'Shreya', 'Deepak', 'Nandini', 'Pranav', 'Aditi', 'Kiran', 'Divya',
+]
+export const LAST_NAMES = [
+  'Nair', 'Menon', 'Iyer', 'Reddy', 'Subramanian', 'Pillai', 'Shetty', 'Kulkarni', 'Bhat', 'Hegde',
+  'Gowda', 'Naik', 'Rao', 'Shenoy', 'Joshi', 'Desai', 'Kamath', 'Prabhu', 'Patil', 'Das',
+  'Kumar', 'Narayan', 'Acharya', 'Bhandary', 'Murthy', 'Hebbar', 'Poojary', 'Kini', 'Sharma', 'Varma',
 ]

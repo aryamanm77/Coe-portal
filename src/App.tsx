@@ -6,7 +6,6 @@ import { AuthProvider } from './features/auth/AuthContext'
 import { LoginPage } from './features/auth/LoginPage'
 import { ProtectedRoute } from './features/auth/ProtectedRoute'
 import { DashboardPage } from './features/dashboard/DashboardPage'
-import { KeyApprovalsPage } from './features/approvals/KeyApprovalsPage'
 import { FileTransferPage } from './features/transfer/FileTransferPage'
 import { ResultsPage } from './features/results/ResultsPage'
 import { SchedulePage } from './features/schedule/SchedulePage'
@@ -25,7 +24,6 @@ export default function App() {
                   <Route path="/dashboard" element={<DashboardPage />} />
                   <Route path="/schedule-exam" element={<SchedulePage />} />
                   <Route path="/file-transfer" element={<FileTransferPage />} />
-                  <Route path="/key-approvals" element={<KeyApprovalsPage />} />
                   <Route path="/results" element={<ResultsPage />} />
                   <Route path="/activity-log" element={<ActivityLogPage />} />
                 </Route>

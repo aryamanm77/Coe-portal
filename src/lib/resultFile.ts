@@ -1,13 +1,15 @@
-import { DEPARTMENT_SHORT, STUDENT_NAMES } from '../data/catalog'
+import { DEPARTMENT_SHORT, FIRST_NAMES, LAST_NAMES } from '../data/catalog'
 import type { Exam, ResultSet, StudentResult } from '../types'
 import {
   computeMarks,
   demoHash,
   mulberry32,
   questionIds,
+  sectionOf,
   seedFromString,
   stableStringify,
   totalQuestions,
+  yearOfSemester,
 } from './utils'
 
 const OPTIONS = ['A', 'B', 'C', 'D']
@@ -29,12 +31,19 @@ export function generateStudents(
   absentCount: number,
 ): StudentResult[] {
   const short = DEPARTMENT_SHORT[exam.department] ?? 'XX'
+  // USN pattern (demo): 1CE + admission year + department + roll number. Each section owns a block of 60 roll numbers,
+  // so students in different years / sections never share a USN.
+  const admissionYY = String(27 - yearOfSemester(exam.semester || 1)).padStart(2, '0')
+  const sectionIdx = Math.max(0, sectionOf(exam.classSection).toUpperCase().charCodeAt(0) - 65)
+  const rollBase = sectionIdx * 60
   const absentIdx = new Set<number>()
   while (absentIdx.size < absentCount) absentIdx.add(Math.floor(rand() * count))
 
   return Array.from({ length: count }, (_, i) => {
-    const usn = `1CE22${short}${String(i + 1).padStart(3, '0')}`
-    const name = STUDENT_NAMES[i % STUDENT_NAMES.length]
+    const roll = rollBase + i + 1
+    const usn = `1CE${admissionYY}${short}${String(roll).padStart(3, '0')}`
+    const n = rollBase + i
+    const name = `${FIRST_NAMES[(n * 7 + sectionIdx) % FIRST_NAMES.length]} ${LAST_NAMES[(n * 3 + Math.floor(n / FIRST_NAMES.length)) % LAST_NAMES.length]}`
     if (absentIdx.has(i)) {
       return { usn, name, status: 'Absent' as const, answers: {}, marks: null }
     }
@@ -49,22 +58,6 @@ export function generateStudents(
     }
     return { usn, name, status: 'Present' as const, answers, marks: computeMarks(answers, answerKey) }
   })
-}
-
-export function keyChangeImpact(
-  students: StudentResult[],
-  qid: string,
-  oldKey: string,
-  newKey: string,
-): { gained: number; lost: number } {
-  let gained = 0
-  let lost = 0
-  for (const s of students) {
-    if (s.status !== 'Present') continue
-    if (s.answers[qid] === newKey && oldKey !== newKey) gained++
-    if (s.answers[qid] === oldKey && oldKey !== newKey) lost++
-  }
-  return { gained, lost }
 }
 
 /* ---------- result-file building ---------- */
@@ -160,7 +153,7 @@ export interface ImportValidation {
   students?: StudentResult[]
 }
 
-const MAX_FILE_BYTES = 2 * 1024 * 1024
+const MAX_FILE_BYTES = 10 * 1024 * 1024
 
 export function validateResultFile(
   text: string,
@@ -194,7 +187,7 @@ export function validateResultFile(
     return finish()
   }
   if (size > MAX_FILE_BYTES) {
-    set('json', 'fail', 'File is larger than the 2 MB demo limit.')
+    set('json', 'fail', 'File is larger than the 10 MB demo limit.')
     return finish()
   }
 

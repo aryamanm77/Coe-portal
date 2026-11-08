@@ -114,6 +114,45 @@ export function formatDuration(minutes: number): string {
 
 /* ---------- exam helpers ---------- */
 
+/** Academic year (1–4) for a semester (1–8). */
+export function yearOfSemester(semester: number): number {
+  return Math.max(1, Math.ceil(semester / 2))
+}
+
+export function yearLabel(year: number): string {
+  const suffix = year === 1 ? 'st' : year === 2 ? 'nd' : year === 3 ? 'rd' : 'th'
+  return `${year}${suffix} year`
+}
+
+/** "3-A" → "A" */
+export function sectionOf(classSection: string): string {
+  return classSection.split('-')[1] ?? classSection
+}
+
+/** True once the real start time has passed, or the demo "simulate start" switch is on. */
+export function hasStarted(exam: Pick<Exam, 'date' | 'startTime' | 'demoStarted'>, now = Date.now()): boolean {
+  return !!exam.demoStarted || examStart(exam).getTime() <= now
+}
+
+export type PaperState = 'No paper' | 'Not started' | 'Ready to publish' | 'Released to HOD'
+
+export function paperState(exam: Exam, now = Date.now()): PaperState {
+  if (exam.paperRelease) return 'Released to HOD'
+  if (exam.status === 'Draft') return 'No paper'
+  return hasStarted(exam, now) ? 'Ready to publish' : 'Not started'
+}
+
+export function timeUntil(date: Date, now = Date.now()): string {
+  const diff = date.getTime() - now
+  if (diff <= 0) return 'started'
+  const min = Math.ceil(diff / 60000)
+  if (min < 60) return `in ${min} min`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `in ${hr} h ${min % 60} min`
+  const d = Math.floor(hr / 24)
+  return `in ${d} day${d === 1 ? '' : 's'} ${hr % 24} h`
+}
+
 export function totalQuestions(exam: Pick<Exam, 'moduleQuestions'>): number {
   return exam.moduleQuestions.reduce((a, b) => a + b, 0)
 }
@@ -175,7 +214,7 @@ export function isPublished(rs: ResultSet): boolean {
 }
 
 export function awaitingPublication(rs: ResultSet): boolean {
-  return !isPublished(rs) || rs.needsRepublish
+  return !isPublished(rs)
 }
 
 /* ---------- downloads ---------- */

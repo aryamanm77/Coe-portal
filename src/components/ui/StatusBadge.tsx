@@ -5,6 +5,7 @@ import {
   Clock,
   FileDown,
   Package,
+  Send,
   XCircle,
   type LucideIcon,
 } from 'lucide-react'
@@ -26,13 +27,13 @@ const MAP: Record<string, { tone: Tone; icon: LucideIcon }> = {
   'Package Exported': { tone: 'navy', icon: Package },
   'Results Imported': { tone: 'amber', icon: FileDown },
   Published: { tone: 'green', icon: CheckCircle2 },
-  Pending: { tone: 'amber', icon: Clock },
-  Approved: { tone: 'green', icon: CheckCircle2 },
-  Rejected: { tone: 'red', icon: XCircle },
   Present: { tone: 'green', icon: CheckCircle2 },
   Absent: { tone: 'red', icon: XCircle },
   'Not published': { tone: 'amber', icon: Clock },
-  'Correction pending re-publish': { tone: 'amber', icon: Clock },
+  'Not started': { tone: 'neutral', icon: Clock },
+  'Ready to publish': { tone: 'amber', icon: Send },
+  'Released to HOD': { tone: 'green', icon: CheckCircle2 },
+  'No paper': { tone: 'neutral', icon: CircleDashed },
 }
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {

@@ -1,10 +1,10 @@
-import { CalendarPlus, ClipboardCheck, KeyRound, LogIn, Settings2, Usb, type LucideIcon } from 'lucide-react'
+import { CalendarPlus, ClipboardCheck, FileText, LogIn, Settings2, Usb, type LucideIcon } from 'lucide-react'
 import type { ActivityCategory } from '../../types'
 
 export const CATEGORY_ICONS: Record<ActivityCategory, LucideIcon> = {
   Schedule: CalendarPlus,
   Transfer: Usb,
-  Approval: KeyRound,
+  'Question Paper': FileText,
   Publishing: ClipboardCheck,
   Session: LogIn,
   System: Settings2,

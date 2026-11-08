@@ -10,7 +10,7 @@ import { useApp } from '../../store/AppStore'
 import type { ActivityCategory } from '../../types'
 import { CategoryIcon } from './CategoryIcon'
 
-const CATEGORIES: ActivityCategory[] = ['Schedule', 'Transfer', 'Approval', 'Publishing', 'Session', 'System']
+const CATEGORIES: ActivityCategory[] = ['Schedule', 'Transfer', 'Question Paper', 'Publishing', 'Session', 'System']
 const PAGE = 25
 
 export function ActivityLogPage() {
@@ -40,7 +40,7 @@ export function ActivityLogPage() {
   return (
     <div className="space-y-6">
       <p className="max-w-3xl text-sm text-muted">
-        A browser-local record of actions taken in this demo — scheduling, exports, imports, approvals and publishing.
+        A browser-local record of actions taken in this demo — scheduling, question paper releases, exports, imports and publishing.
         It is stored in localStorage on this device and is not a tamper-proof audit trail.
       </p>
 

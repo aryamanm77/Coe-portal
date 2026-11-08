@@ -1,24 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ACTOR, createSeedData } from '../data/seed'
 import { buildPackage, packageFileName, previewPackageId, TRANSFER_STEPS } from '../lib/examPackage'
-import { keyChangeImpact } from '../lib/resultFile'
-import {
-  awaitingPublication,
-  recomputeStudents,
-  uid,
-} from '../lib/utils'
+import { paperIdFor } from '../lib/questionPaper'
+import { awaitingPublication, hasStarted, uid } from '../lib/utils'
 import type {
   ActivityCategory,
   ActivityEntry,
   AppData,
   Exam,
   ExamDraftInput,
-  KeyRequest,
   ResultSet,
   StudentResult,
 } from '../types'
 
-const STORAGE_KEY = 'coe.demo.data.v1'
+const STORAGE_KEY = 'coe.demo.data.v2'
 
 function load(): AppData {
   try {
@@ -28,7 +23,6 @@ function load(): AppData {
       if (
         Array.isArray(parsed.exams) &&
         Array.isArray(parsed.resultSets) &&
-        Array.isArray(parsed.keyRequests) &&
         Array.isArray(parsed.activity)
       ) {
         return parsed
@@ -59,13 +53,21 @@ interface AppStore extends AppData {
     answerKey: Record<string, string>
     students: StudentResult[]
   }) => ResultSet | null
-  decideKeyRequest: (id: string, decision: 'Approved' | 'Rejected', note: string) => void
-  publishResults: (resultSetId: string, recipients: string[]) => void
+  /** Publish one or more result sheets to each department's HOD and to the Principal (simulated). */
+  publishResultSets: (resultSetIds: string[]) => number
+  /** Simulated release of the generated question paper to the exam's HOD. Only allowed once the exam has started. */
+  releasePaper: (examId: string, mode?: 'Manual' | 'Automatic') => boolean
+  setAutoRelease: (examId: string, on: boolean) => void
+  /** Demo helper: pretend the exam has started so the release flow can be tried early. */
+  simulateExamStart: (examId: string) => void
+  /** Current time, refreshed every 15 s so countdowns and counts stay live. */
+  now: number
   resetDemo: () => void
   counts: {
     scheduled: number
     packagesReady: number
-    pendingApprovals: number
+    papersPending: number
+    papersDue: number
     awaitingPublication: number
   }
 }
@@ -74,6 +76,7 @@ const Ctx = createContext<AppStore | null>(null)
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(load)
+  const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
     try {
@@ -119,6 +122,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
         transferChecklist: existing?.transferChecklist ?? [false, false, false, false],
+        autoReleasePaper: input.autoReleasePaper,
+        demoStarted: existing?.demoStarted,
+        paperRelease: existing?.paperRelease,
       }
       const entry: ActivityEntry = {
         id: uid('act'),
@@ -230,7 +236,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
         answerKey,
         students,
         publications: [],
-        needsRepublish: false,
       }
       const entry: ActivityEntry = {
         id: uid('act'),
@@ -260,91 +265,147 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [data.exams, data.resultSets],
   )
 
-  const decideKeyRequest: AppStore['decideKeyRequest'] = useCallback(
-    (id, decision, note) => {
-      const req = data.keyRequests.find((k) => k.id === id)
-      if (!req || req.status !== 'Pending') return
-      const exam = data.exams.find((e) => e.id === req.examId)
-      const rs = data.resultSets.find((r) => r.examId === req.examId)
-      const now = new Date().toISOString()
-      const label = exam ? examName(exam) : req.examId
+  const releaseExamPaper = (exam: Exam, mode: 'Manual' | 'Automatic', at: string) => {
+    const paperId = paperIdFor(exam)
+    const recipient = `HOD — ${exam.department}`
+    const released: Exam = { ...exam, updatedAt: at, paperRelease: { paperId, releasedAt: at, mode, recipient } }
+    const entry: ActivityEntry = {
+      id: uid('act'),
+      at,
+      category: 'Question Paper',
+      actor: mode === 'Automatic' ? 'System (automatic release, simulated)' : ACTOR,
+      examId: exam.id,
+      message: `Question paper ${paperId} released to ${recipient} for ${examName(exam)} after the exam started (${mode.toLowerCase()}, simulated — nothing was sent)`,
+    }
+    return { released, entry }
+  }
 
-      let updatedReq: KeyRequest = { ...req, status: decision, decidedAt: now, decisionNote: note }
-      let updatedRs: ResultSet | undefined
-      let message: string
+  const releasePaper: AppStore['releasePaper'] = useCallback(
+    (examId, mode = 'Manual') => {
+      const exam = data.exams.find((e) => e.id === examId)
+      if (!exam || exam.paperRelease || exam.status === 'Draft' || !hasStarted(exam)) return false
+      const { released, entry } = releaseExamPaper(exam, mode, new Date().toISOString())
+      setData((d) => ({
+        ...d,
+        exams: d.exams.map((e) => (e.id === examId ? released : e)),
+        activity: [entry, ...d.activity],
+      }))
+      return true
+    },
+    [data.exams],
+  )
 
-      if (decision === 'Approved' && rs) {
-        const { gained, lost } = keyChangeImpact(rs.students, req.questionId, req.oldKey, req.newKey)
-        const answerKey = { ...rs.answerKey, [req.questionId]: req.newKey }
-        const wasPublished = rs.publications.length > 0
-        updatedRs = {
-          ...rs,
-          answerKey,
-          students: recomputeStudents(rs.students, answerKey),
-          needsRepublish: rs.needsRepublish || wasPublished,
-        }
-        updatedReq = { ...updatedReq, gained, lost }
-        message = `Approved key change for ${label} · ${req.questionId} (${req.oldKey} → ${req.newKey}); re-marked by question ID — ${gained} gained, ${lost} lost${wasPublished ? '. Re-publication required' : ''}`
-      } else if (decision === 'Approved') {
-        message = `Approved key change for ${label} · ${req.questionId} (${req.oldKey} → ${req.newKey})`
-      } else {
-        message = `Rejected key change for ${label} · ${req.questionId} (${req.oldKey} → ${req.newKey})`
-      }
+  const setAutoRelease: AppStore['setAutoRelease'] = useCallback((examId, on) => {
+    setData((d) => ({ ...d, exams: d.exams.map((e) => (e.id === examId ? { ...e, autoReleasePaper: on } : e)) }))
+  }, [])
 
+  const simulateExamStart: AppStore['simulateExamStart'] = useCallback(
+    (examId) => {
+      const exam = data.exams.find((e) => e.id === examId)
+      if (!exam || exam.status === 'Draft' || exam.paperRelease) return
       const entry: ActivityEntry = {
         id: uid('act'),
-        at: now,
-        category: 'Approval',
+        at: new Date().toISOString(),
+        category: 'Question Paper',
         actor: ACTOR,
-        examId: req.examId,
-        message,
+        examId,
+        message: `Demo: treated ${examName(exam)} as started so the question paper release can be tried`,
       }
       setData((d) => ({
         ...d,
-        keyRequests: d.keyRequests.map((k) => (k.id === id ? updatedReq : k)),
-        resultSets: updatedRs ? d.resultSets.map((r) => (r.id === updatedRs!.id ? updatedRs! : r)) : d.resultSets,
+        exams: d.exams.map((e) => (e.id === examId ? { ...e, demoStarted: true } : e)),
         activity: [entry, ...d.activity],
       }))
     },
-    [data.keyRequests, data.exams, data.resultSets],
+    [data.exams],
   )
 
-  const publishResults: AppStore['publishResults'] = useCallback(
-    (resultSetId, recipients) => {
-      const rs = data.resultSets.find((r) => r.id === resultSetId)
-      if (!rs) return
-      const exam = data.exams.find((e) => e.id === rs.examId)
-      const now = new Date().toISOString()
-      const version = rs.publications.length + 1
-      const republish = rs.publications.length > 0
-      const updatedRs: ResultSet = {
-        ...rs,
-        needsRepublish: false,
-        publications: [
-          ...rs.publications,
-          {
-            version,
-            at: now,
-            recipients,
-            kind: republish ? 'Re-publication after correction' : 'Initial publication',
-          },
-        ],
+  // Automatic release: while the portal is open, publish each paper to its HOD once the exam has started.
+  const runAutoRelease = useCallback(() => {
+    setNow(Date.now())
+    setData((d) => {
+      const t = Date.now()
+      const due = d.exams.filter((e) => e.autoReleasePaper && !e.paperRelease && e.status !== 'Draft' && hasStarted(e, t))
+      if (due.length === 0) return d
+      const at = new Date(t).toISOString()
+      const results = due.map((e) => releaseExamPaper(e, 'Automatic', at))
+      const byId = new Map(results.map((r) => [r.released.id, r.released]))
+      return {
+        ...d,
+        exams: d.exams.map((e) => byId.get(e.id) ?? e),
+        activity: [...results.map((r) => r.entry).reverse(), ...d.activity],
       }
-      const label = exam ? examName(exam) : rs.examId
-      const entry: ActivityEntry = {
+    })
+  }, [])
+
+  useEffect(() => {
+    const id = window.setInterval(runAutoRelease, 15000)
+    return () => window.clearInterval(id)
+  }, [runAutoRelease])
+
+  // also re-check right away whenever the exams change (e.g. a new exam, auto-release switched on, demo start)
+  useEffect(() => {
+    runAutoRelease()
+  }, [data.exams, runAutoRelease])
+
+  const publishResultSets: AppStore['publishResultSets'] = useCallback(
+    (ids) => {
+      const sheets = data.resultSets.filter((r) => ids.includes(r.id) && r.publications.length === 0)
+      if (sheets.length === 0) return 0
+      const now = new Date().toISOString()
+      const batchId = `PUB-${Math.random().toString(36).slice(2, 8).toUpperCase()}`
+      const examOf = (r: ResultSet) => data.exams.find((e) => e.id === r.examId)
+      const entries: ActivityEntry[] = []
+
+      // one HOD entry per department
+      const byDept = new Map<string, ResultSet[]>()
+      for (const r of sheets) {
+        const dept = examOf(r)?.department ?? 'Unknown'
+        byDept.set(dept, [...(byDept.get(dept) ?? []), r])
+      }
+      for (const [dept, list] of byDept) {
+        const count = list.reduce((a, r) => a + r.students.length, 0)
+        entries.push({
+          id: uid('act'),
+          at: now,
+          category: 'Publishing',
+          actor: ACTOR,
+          message: `Published ${list.length} result sheet${list.length > 1 ? 's' : ''} (${count} students) to HOD — ${dept} (simulated, nothing was sent)`,
+        })
+      }
+      const total = sheets.reduce((a, r) => a + r.students.length, 0)
+      entries.push({
         id: uid('act'),
         at: now,
         category: 'Publishing',
         actor: ACTOR,
-        examId: rs.examId,
-        message: `${republish ? 'Re-published corrected results' : 'Published results'} (v${version}) for ${label} to ${recipients.join(' and ')} — simulated, nothing was sent`,
-      }
+        message: `Published consolidated results — ${sheets.length} sheet${sheets.length > 1 ? 's' : ''}, ${total} students across ${byDept.size} department${byDept.size > 1 ? 's' : ''} — to the Principal (simulated, nothing was sent)`,
+      })
+
+      const sheetIds = new Set(sheets.map((r) => r.id))
+      const examIds = new Set(sheets.map((r) => r.examId))
       setData((d) => ({
         ...d,
-        resultSets: d.resultSets.map((r) => (r.id === rs.id ? updatedRs : r)),
-        exams: d.exams.map((e) => (e.id === rs.examId ? { ...e, status: 'Published', updatedAt: now } : e)),
-        activity: [entry, ...d.activity],
+        resultSets: d.resultSets.map((r) =>
+          sheetIds.has(r.id)
+            ? {
+                ...r,
+                publications: [
+                  {
+                    version: 1,
+                    at: now,
+                    recipients: [`HOD — ${examOf(r)?.department ?? 'Department'}`, 'Principal'],
+                    kind: 'Initial publication' as const,
+                    batchId,
+                  },
+                ],
+              }
+            : r,
+        ),
+        exams: d.exams.map((e) => (examIds.has(e.id) ? { ...e, status: 'Published' as const, updatedAt: now } : e)),
+        activity: [...entries.reverse(), ...d.activity],
       }))
+      return sheets.length
     },
     [data.resultSets, data.exams],
   )
@@ -353,15 +414,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setData(createSeedData())
   }, [])
 
-  const counts = useMemo(
-    () => ({
+  const counts = useMemo(() => {
+    const unreleased = data.exams.filter(
+      (e) => !e.paperRelease && (e.status === 'Scheduled' || e.status === 'Package Exported'),
+    )
+    return {
       scheduled: data.exams.filter((e) => e.status === 'Scheduled').length,
       packagesReady: data.exams.filter((e) => e.status === 'Package Exported').length,
-      pendingApprovals: data.keyRequests.filter((k) => k.status === 'Pending').length,
+      papersPending: unreleased.length,
+      papersDue: unreleased.filter((e) => hasStarted(e, now)).length,
       awaitingPublication: data.resultSets.filter(awaitingPublication).length,
-    }),
-    [data],
-  )
+    }
+  }, [data, now])
 
   const value: AppStore = {
     ...data,
@@ -371,8 +435,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     redownloadPackage,
     toggleChecklist,
     importResults,
-    decideKeyRequest,
-    publishResults,
+    publishResultSets,
+    releasePaper,
+    setAutoRelease,
+    simulateExamStart,
+    now,
     resetDemo,
     counts,
   }

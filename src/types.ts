@@ -37,6 +37,19 @@ export interface Exam {
   packageCreatedAt?: string
   /** Manual transfer checklist (index 0 mirrors "package exported") */
   transferChecklist: [boolean, boolean, boolean, boolean]
+  /** Publish the question paper to the HOD automatically once the exam has started (simulated). */
+  autoReleasePaper: boolean
+  /** Demo-only: treat the exam as already started, so the release flow can be tried before the real start time. */
+  demoStarted?: boolean
+  /** Set once the question paper has been (simulated) published to the HOD. */
+  paperRelease?: PaperRelease
+}
+
+export interface PaperRelease {
+  paperId: string
+  releasedAt: string
+  mode: 'Automatic' | 'Manual'
+  recipient: string
 }
 
 export interface ExamDraftInput {
@@ -50,6 +63,7 @@ export interface ExamDraftInput {
   date: string
   startTime: string
   durationMinutes: number | null
+  autoReleasePaper: boolean
 }
 
 export type AttendanceStatus = 'Present' | 'Absent'
@@ -68,7 +82,9 @@ export interface Publication {
   version: number
   at: string
   recipients: string[]
-  kind: 'Initial publication' | 'Re-publication after correction'
+  kind: 'Initial publication'
+  /** Shared by every result sheet published in the same bulk action */
+  batchId: string
 }
 
 export interface ResultSet {
@@ -81,33 +97,12 @@ export interface ResultSet {
   answerKey: Record<string, string>
   students: StudentResult[]
   publications: Publication[]
-  /** Set when an approved key correction changed marks after publication */
-  needsRepublish: boolean
-}
-
-export type KeyRequestStatus = 'Pending' | 'Approved' | 'Rejected'
-
-export interface KeyRequest {
-  id: string
-  examId: string
-  questionId: string
-  oldKey: string
-  newKey: string
-  reason: string
-  requestedBy: string
-  requestedAt: string
-  status: KeyRequestStatus
-  decidedAt?: string
-  decisionNote?: string
-  /** Filled in when approved */
-  gained?: number
-  lost?: number
 }
 
 export type ActivityCategory =
   | 'Schedule'
   | 'Transfer'
-  | 'Approval'
+  | 'Question Paper'
   | 'Publishing'
   | 'Session'
   | 'System'
@@ -124,6 +119,5 @@ export interface ActivityEntry {
 export interface AppData {
   exams: Exam[]
   resultSets: ResultSet[]
-  keyRequests: KeyRequest[]
   activity: ActivityEntry[]
 }
